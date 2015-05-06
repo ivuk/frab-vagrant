@@ -1,0 +1,26 @@
+development:
+  adapter: mysql2
+  encoding: utf8
+  database: {{ frab_devel_db }}
+  username: {{ frab_db_user }}
+  password: {{ frab_db_pass }}
+  host: localhost
+  port: 3306
+
+test:
+  adapter: mysql2
+  encoding: utf8
+  database: {{ frab_test_db }}
+  username: {{ frab_db_user }}
+  password: {{ frab_db_pass }}
+  host: localhost
+  port: 3306
+
+production:
+  adapter: mysql2
+  encoding: utf8
+  database: {{ frab_db }}
+  username: {{ frab_db_user }}
+  password: {{ frab_db_pass }}
+  host: localhost
+  port: 3306

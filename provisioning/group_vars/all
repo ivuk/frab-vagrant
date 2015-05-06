@@ -1,0 +1,7 @@
+mysql_root_password: ididnotreadtheinstructions
+frab_db_user: ididnotread
+frab_db_pass: ididnotreadtheinstructions
+frab_db: ididnotreadtheinstructions
+frab_devel_db: ididnotreadtheinstructions2
+frab_test_db: ididnotreadtheinstructions3
+default_admin_email: admin@example.org

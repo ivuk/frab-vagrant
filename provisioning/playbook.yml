@@ -1,0 +1,159 @@
+---
+- hosts: all
+  sudo: yes
+  tasks:
+    - name: Install prerequisite packages
+      apt: name={{ item }} state=latest update_cache=yes cache_valid_time=7200
+      with_items:
+        - apache2
+        - git-core
+        - imagemagick
+        - libapache2-mod-passenger
+        - libmysqlclient-dev
+        - libpq-dev
+        - libsqlite3-dev
+        - mysql-server
+        - mysql-server-5.5
+        - nodejs
+        - python-mysqldb # Ansible requirement
+        - rbenv
+        - ruby-build
+        - ruby-passenger
+    - name: Start the MySQL service and make sure it's enabled on boot
+      service: name=mysql state=started enabled=yes
+    - name: Delete anonymous MySQL user
+      mysql_user: name="" host={{ item }} state=absent
+      with_items:
+        - localhost
+        - "{{ ansible_nodename }}"
+    - name: Remove the MySQL 'test' database
+      mysql_db: db=test state=absent
+    - name: Change the 'root' login credentials
+      mysql_user: name=root
+                  password="{{ mysql_root_password }}"
+                  priv=*.*:ALL,GRANT
+                  host={{ item }}
+      with_items:
+        - "{{ ansible_nodename }}"
+        - 127.0.0.1
+        - ::1
+        - localhost
+    - name: Copy my.cnf file to /root/.my.cnf so we can re-provision properly
+      template: src=templates/my.cnf.j2 dest=/root/.my.cnf owner=root group=root mode=0600
+    - name: Create the 'frab' MySQL database
+      mysql_db: name="{{ frab_db }}" state=present
+    - name: Create the 'frab' MySQL user ('localhost' only)
+      mysql_user: name="{{ frab_db_user }}"
+                  password="{{ frab_db_pass }}"
+                  priv="{{ frab_db }}".*:ALL
+                  host=localhost
+                  state=present
+    - name: Add the 'rails' user account
+      user: name=rails shell=/usr/sbin/nologin
+    - name: Clone the 'frab' repository from GitHub
+      sudo_user: rails
+      git: repo=https://github.com/frab/frab.git dest=/home/rails/frab-app
+    - name: Install Ruby via rbenv
+      sudo_user: rails
+      command: rbenv install 1.9.3-p194 --disable-install-rdoc
+      args:
+        creates: /home/rails/.rbenv/versions/1.9.3-p194/bin/ruby
+    - name: Set the installed Ruby (via rbenv) as the default
+      sudo_user: rails
+      command: rbenv global 1.9.3-p194
+      args:
+        creates: /home/rails/.rbenv/version
+    - name: Create the ~/.bash_aliases file so that rbenv gets set up
+      sudo_user: rails
+      shell: echo 'eval "$(rbenv init -)"' > /home/rails/.bash_aliases
+      args:
+        creates: /home/rails/.bash_aliases
+    - name: Check the permissions on /home/rails/.bash_aliases
+      file: name=/home/rails/.bash_aliases state=file owner=rails group=rails mode=0600
+    - name: Install 'bundler' via gem for our new (rbenv) Ruby install
+      sudo_user: rails
+      shell: . /home/rails/.bash_aliases; gem install bundler --no-rdoc --no-ri
+      args:
+        creates: /home/rails/.rbenv/versions/1.9.3-p194/bin/bundler
+        executable: /bin/bash
+    - name: Copy database.yml.j2 template to config/database.yml
+      template: src=templates/database.yml.j2 dest=/home/rails/frab-app/config/database.yml owner=rails group=rails mode=0600
+    - name: Copy config/settings.yml.template to config/settings.yml
+      sudo_user: rails
+      command: cp /home/rails/frab-app/config/settings.yml.template /home/rails/frab-app/config/settings.yml
+      args:
+        creates: /home/rails/frab-app/config/settings.yml
+    - name: Check the permissions on /home/rails/frab-app/config/settings.yml
+      file: name=/home/rails/frab-app/config/settings.yml state=file owner=rails group=rails mode=0600
+    - name: Exec 'bundle install' in frab-app/
+      sudo_user: rails
+      shell: . /home/rails/.bash_aliases; bundle install
+      args:
+        chdir: /home/rails/frab-app
+        creates: /home/rails/.rbenv/versions/1.9.3-p194/bin/nokogiri
+        executable: /bin/bash
+    - name: Check if the default admin account already exists in the production database
+      command: mysql -N -e 'select count(*) from {{ frab_db }}.users where email="{{ default_admin_email }}";'
+      ignore_errors: True
+      register: admin_user
+    - name: Exec 'rake db:setup' for production environment in frab-app/
+      sudo_user: rails
+      shell: . /home/rails/.bash_aliases; bundle exec rake db:setup RAILS_ENV=production
+      args:
+        chdir: /home/rails/frab-app
+        executable: /bin/bash
+      when: admin_user.stdout|int != 1
+    - name: Exec 'rake assets:precompile' in frab-app/
+      sudo_user: rails
+      shell: . /home/rails/.bash_aliases; bundle exec rake assets:precompile
+      args:
+        chdir: /home/rails/frab-app
+        executable: /bin/bash
+    - name: Copy config/initializers/secret_token.rb.example to config/initializers/secret_token.rb
+      sudo_user: rails
+      command: cp /home/rails/frab-app/config/initializers/secret_token.rb.example /home/rails/frab-app/config/initializers/secret_token.rb
+      args:
+        creates: /home/rails/frab-app/config/initializers/secret_token.rb
+    - name: Check the permissions on /home/rails/frab-app/config/initializers/secret_token.rb
+      file: name=/home/rails/frab-app/config/initializers/secret_token.rb state=file owner=rails group=rails mode=0600
+    - name: Register the 'rake secret' variable
+      sudo_user: rails
+      shell: . /home/rails/.bash_aliases; bundle exec rake secret
+      args:
+        chdir: /home/rails/frab-app
+        executable: /bin/bash
+      register: rake_secret
+    - name: Update the 'secret_token' value in config/initializers/secret_token.rb
+      sudo_user: rails
+      lineinfile:
+        dest: /home/rails/frab-app/config/initializers/secret_token.rb
+        regexp: ^Frab::Application.config.secret_token \=
+        line: Frab::Application.config.secret_token = '{{ rake_secret.stdout }}'
+        owner: rails
+        group: rails
+        mode: 0600
+    - name: Copy 001-frab.conf to /etc/apache2/sites-available/
+      copy: src=files/001-frab.conf dest=/etc/apache2/sites-available/001-frab.conf owner=root group=root mode=0600
+    - name: Disable the 'default' virtual host
+      command: a2dissite 000-default
+      notify:
+        - Restart 'apache2' service
+    - name: Enable the '001-frab' virtual host
+      command: a2ensite 001-frab
+      args:
+        creates: /etc/apache2/sites-enabled/001-frab.conf
+      notify:
+        - Restart 'apache2' service
+    - name: Update passenger.conf to point to Ruby version installed via rbenv
+      lineinfile:
+        dest: /etc/apache2/mods-available/passenger.conf
+        regexp: .*PassengerDefaultRuby
+        line: '  PassengerDefaultRuby /home/rails/.rbenv/versions/1.9.3-p194/bin/ruby'
+        owner: root
+        group: root
+        mode: 0644
+      notify:
+        - Restart 'apache2' service
+  handlers:
+    - name: Restart 'apache2' service
+      service: name=apache2 state=restarted
