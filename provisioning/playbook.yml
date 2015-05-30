@@ -185,6 +185,8 @@
         - Restart 'apache2' service
     - name: Enable mod_headers for Apache
       command: a2enmod headers
+      args:
+        creates: /etc/apache2/mods-enabled/headers.load
       notify:
         - Restart 'apache2' service
     - name: Create the /var/backups/mysql/ directory
