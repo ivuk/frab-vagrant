@@ -1,0 +1,18 @@
+PaperTrail.enabled = false
+
+person = Person.create!(
+  email: "{{ default_admin_email }}",
+    first_name: "admin",
+      last_name: "user",
+        public_name: "{{ default_admin_public_name }}"
+        )
+
+admin = User.new(
+  email: person.email,
+    password: "{{ default_admin_password }}",
+      password_confirmation: "{{ default_admin_password }}"
+      )
+admin.person = person
+admin.role = "admin"
+admin.confirmed_at = Time.now
+admin.save!
