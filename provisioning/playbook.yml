@@ -7,6 +7,7 @@
       with_items:
         - apache2
         - apparmor-profiles
+        - build-essential
         - byobu
         - fail2ban
         - git-core
