@@ -15,3 +15,5 @@ frab_smtp_server_port: 25
 frab_smtp_domain: localdomain
 frab_smtp_auth_username: ididnotread2
 frab_smtp_auth_password: ididnotread3
+ivuk_password: Use 'mkpasswd --method=SHA-512' to fill in this value
+tkisason_password: Use 'mkpasswd --method=SHA-512' to fill in this value
