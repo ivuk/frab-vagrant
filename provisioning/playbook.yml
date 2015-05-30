@@ -193,6 +193,36 @@
       file: name=/var/backups/mysql state=directory owner=root group=root mode=0600
     - name: Copy the 'mysqldump.sh' shell script to /etc/cron.daily/
       copy: src=files/mysqldump.sh dest=/etc/cron.daily/mysqldump.sh owner=root group=root mode=0755
+    - name: Add the needed primary user groups
+      group: name={{ item }} state=present system=no
+      with_items:
+        - ivuk
+        - tkisason
+    - name: Add the needed user accounts
+      user:
+        name: "{{ item.name }}"
+        comment: "{{ item.comment }}"
+        group: "{{ item.group }}"
+        groups: adm,sudo
+        append: yes
+        password: "{{ item.password }}"
+        shell: /bin/bash
+        update_password: on_create
+        state: present
+        system: no
+      with_items:
+        - { name: 'ivuk', comment: 'Igor Vuk', group: 'ivuk', password: '{{ ivuk_password }}' }
+        - { name: 'tkisason', comment: 'Tonimir Kisasondi', group: 'tkisason', password: '{{ tkisason_password }}' }
+    - name: Import SSH public key for 'ivuk' user
+      sudo_user: ivuk
+      command: ssh-import-id gh:ivuk
+      args:
+        creates: /home/ivuk/.ssh/authorized_keys
+    - name: Import SSH public key for 'tkisason' user
+      sudo_user: tkisason
+      command: ssh-import-id gh:tkisason
+      args:
+        creates: /home/tkisason/.ssh/authorized_keys
     - name: Copy 'issue.net' to /etc/
       copy: src=files/issue.net dest=/etc/issue.net owner=root group=root mode=0644
     - name: Enable banner messsage for SSH
