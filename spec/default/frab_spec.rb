@@ -35,12 +35,12 @@ describe file('/home/rails/frab-app/config/settings.yml') do
   it { should be_file }
 end
 
-describe file('/home/rails/.rbenv/versions/1.9.3-p194/bin/ruby') do
+describe file('/home/rails/.rbenv/versions/1.9.3-p551/bin/ruby') do
   it { should be_executable }
 end
 
 describe command('su -l -s /bin/bash -c ". /home/rails/.bash_aliases; rbenv global" rails') do
-  its(:stdout) { should match /1\.9\.3-p194/ }
+  its(:stdout) { should match /1\.9\.3-p551/ }
 end
 
 describe file('/home/rails/frab-app/config/initializers/secret_token.rb') do

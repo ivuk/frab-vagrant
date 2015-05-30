@@ -29,12 +29,12 @@ end
 
 describe file('/etc/apache2/sites-enabled/001-frab.conf') do
   it { should be_linked_to '../sites-available/001-frab.conf' }
-  it { should contain /ServerName frab.demo.local/ }
+  it { should contain /ServerName localhost.localdomain/ }
 end
 
 describe file('/etc/apache2/mods-available/passenger.conf') do
   it { should be_file }
-  it { should contain /PassengerDefaultRuby \/home\/rails\/\.rbenv\/versions\/1\.9\.3\-p194\/bin\/ruby/ }
+  it { should contain /PassengerDefaultRuby \/home\/rails\/\.rbenv\/versions\/1\.9\.3\-p551\/bin\/ruby/ }
 end
 
 describe file('/etc/apache2/mods-enabled/passenger.conf') do
