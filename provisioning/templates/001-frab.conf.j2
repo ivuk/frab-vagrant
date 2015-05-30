@@ -1,0 +1,7 @@
+<VirtualHost *:80>
+    ServerName localhost.localdomain
+    ServerAlias www.localhost.localdomain
+    ServerAdmin root@localhost.localdomain
+
+    Redirect "/" "http://{{ ansible_eth0["ipv4"]["address"] }}"
+</VirtualHost>
