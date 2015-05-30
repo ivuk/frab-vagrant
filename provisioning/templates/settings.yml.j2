@@ -1,0 +1,23 @@
+development:
+  host: localhost
+  port: 3000
+  protocol: http
+  from_email: {{ frab_email }}
+
+test:
+  host: {{ frab_host }}
+  protocol: http
+  from_email: {{ frab_email }}
+
+production:
+  host: {{ frab_host }}
+  protocol: https
+  from_email: {{ frab_email }}
+  smtp_settings:
+    address: {{ frab_smtp_server }}
+    port: {{ frab_smtp_server_port }}
+    domain: {{ frab_smtp_domain }}
+    user_name: {{ frab_smtp_auth_username }}
+    password: {{ frab_smtp_auth_password }}
+    authentication: 'plain'
+    enable_starttls_auto: true
