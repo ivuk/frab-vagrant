@@ -6,8 +6,12 @@
       apt: name={{ item }} state=latest update_cache=yes cache_valid_time=7200
       with_items:
         - apache2
+        - apparmor-profiles
+        - byobu
+        - fail2ban
         - git-core
         - imagemagick
+        - iptables-persistent
         - libapache2-mod-passenger
         - libmysqlclient-dev
         - libpq-dev
@@ -16,9 +20,8 @@
         - mysql-server-5.5
         - nodejs
         - python-mysqldb # Ansible requirement
-        - rbenv
-        - ruby-build
         - ruby-passenger
+        - ssh-import-id
     - name: Start the MySQL service and make sure it's enabled on boot
       service: name=mysql state=started enabled=yes
     - name: Delete anonymous MySQL user
@@ -38,7 +41,7 @@
         - 127.0.0.1
         - ::1
         - localhost
-    - name: Copy my.cnf file to /root/.my.cnf so we can re-provision properly
+    - name: Copy 'my.cnf' file to /root/.my.cnf so we can re-provision properly
       template: src=templates/my.cnf.j2 dest=/root/.my.cnf owner=root group=root mode=0600
     - name: Create the 'frab' MySQL database
       mysql_db: name="{{ frab_db }}" state=present
@@ -48,49 +51,60 @@
                   priv="{{ frab_db }}".*:ALL
                   host=localhost
                   state=present
+    - name: Copy '60-disable-ipv6.conf' to /etc/sysctl.d/ (disable IPv6)
+      copy: src=files/60-disable-ipv6.conf dest=/etc/sysctl.d/60-disable-ipv6.conf owner=root group=root mode=0644
+      notify:
+        - Start 'procps' service
+    - name: Copy 'rules.v4' and 'rules.v6' to /etc/iptables/
+      copy: src=files/{{ item }} dest=/etc/iptables/{{ item }} owner=root group=root mode=0644
+      with_items:
+        - rules.v4
+        - rules.v6
+      notify:
+        - Restart 'iptables-persistent' service
     - name: Add the 'rails' user account
       user: name=rails shell=/usr/sbin/nologin
     - name: Clone the 'frab' repository from GitHub
       sudo_user: rails
       git: repo=https://github.com/frab/frab.git dest=/home/rails/frab-app
+    - name: Clone the 'rbenv' repository from GitHub
+      sudo_user: rails
+      git: repo=https://github.com/sstephenson/rbenv.git dest=/home/rails/.rbenv
+    - name: Clone the 'ruby-build' repository from GitHub
+      sudo_user: rails
+      git: repo=https://github.com/sstephenson/ruby-build.git dest=/home/rails/.rbenv/plugins/ruby-build
+    - name: Copy 'bash_aliases' to /home/rails/.bash_aliases
+      copy: src=files/bash_aliases dest=/home/rails/.bash_aliases owner=rails group=rails mode=0600
     - name: Install Ruby via rbenv
       sudo_user: rails
-      command: rbenv install 1.9.3-p194 --disable-install-rdoc
+      shell: . /home/rails/.bash_aliases; rbenv install {{ ruby_version }}
       args:
-        creates: /home/rails/.rbenv/versions/1.9.3-p194/bin/ruby
+        creates: /home/rails/.rbenv/versions/{{ ruby_version }}/bin/ruby
+        executable: /bin/bash
     - name: Set the installed Ruby (via rbenv) as the default
       sudo_user: rails
-      command: rbenv global 1.9.3-p194
+      shell: . /home/rails/.bash_aliases; rbenv global {{ ruby_version }}
       args:
         creates: /home/rails/.rbenv/version
-    - name: Create the ~/.bash_aliases file so that rbenv gets set up
-      sudo_user: rails
-      shell: echo 'eval "$(rbenv init -)"' > /home/rails/.bash_aliases
-      args:
-        creates: /home/rails/.bash_aliases
-    - name: Check the permissions on /home/rails/.bash_aliases
-      file: name=/home/rails/.bash_aliases state=file owner=rails group=rails mode=0600
+        executable: /bin/bash
     - name: Install 'bundler' via gem for our new (rbenv) Ruby install
       sudo_user: rails
       shell: . /home/rails/.bash_aliases; gem install bundler --no-rdoc --no-ri
       args:
-        creates: /home/rails/.rbenv/versions/1.9.3-p194/bin/bundler
+        creates: /home/rails/.rbenv/versions/{{ ruby_version }}/bin/bundler
         executable: /bin/bash
-    - name: Copy database.yml.j2 template to config/database.yml
+    - name: Copy 'database.yml.j2' template to config/database.yml
       template: src=templates/database.yml.j2 dest=/home/rails/frab-app/config/database.yml owner=rails group=rails mode=0600
-    - name: Copy config/settings.yml.template to config/settings.yml
-      sudo_user: rails
-      command: cp /home/rails/frab-app/config/settings.yml.template /home/rails/frab-app/config/settings.yml
-      args:
-        creates: /home/rails/frab-app/config/settings.yml
-    - name: Check the permissions on /home/rails/frab-app/config/settings.yml
-      file: name=/home/rails/frab-app/config/settings.yml state=file owner=rails group=rails mode=0600
+    - name: Copy 'settings.yml.j2' template to config/settings.yml
+      template: src=templates/settings.yml.j2 dest=/home/rails/frab-app/config/settings.yml owner=rails group=rails mode=0600
+    - name: Copy 'seeds.rb.j2' template to db/seeds.rb
+      template: src=templates/seeds.rb.j2 dest=/home/rails/frab-app/db/seeds.rb owner=rails group=rails mode=0600
     - name: Exec 'bundle install' in frab-app/
       sudo_user: rails
       shell: . /home/rails/.bash_aliases; bundle install
       args:
         chdir: /home/rails/frab-app
-        creates: /home/rails/.rbenv/versions/1.9.3-p194/bin/nokogiri
+        creates: /home/rails/.rbenv/versions/{{ ruby_version }}/bin/nokogiri
         executable: /bin/bash
     - name: Check if the default admin account already exists in the production database
       command: mysql -N -e 'select count(*) from {{ frab_db }}.users where email="{{ default_admin_email }}";'
@@ -132,7 +146,7 @@
         owner: rails
         group: rails
         mode: 0600
-    - name: Copy 001-frab.conf to /etc/apache2/sites-available/
+    - name: Copy '001-frab.conf' to /etc/apache2/sites-available/
       copy: src=files/001-frab.conf dest=/etc/apache2/sites-available/001-frab.conf owner=root group=root mode=0600
     - name: Disable the 'default' virtual host
       command: a2dissite 000-default
@@ -144,16 +158,79 @@
         creates: /etc/apache2/sites-enabled/001-frab.conf
       notify:
         - Restart 'apache2' service
-    - name: Update passenger.conf to point to Ruby version installed via rbenv
-      lineinfile:
-        dest: /etc/apache2/mods-available/passenger.conf
-        regexp: .*PassengerDefaultRuby
-        line: '  PassengerDefaultRuby /home/rails/.rbenv/versions/1.9.3-p194/bin/ruby'
+    - name: Copy 'apache2-passenger-custom.conf.j2' to /etc/apache2/conf-available/ so we configure Passenger properly
+      template:
+        src: templates/apache2-passenger-custom.conf.j2
+        dest: /etc/apache2/conf-available/apache2-passenger-custom.conf
         owner: root
         group: root
         mode: 0644
       notify:
         - Restart 'apache2' service
+    - name: Enable the custom Passenger Apache configuration from '/etc/apache2/conf-available/apache2-passenger-custom.conf'
+      command: a2enconf apache2-passenger-custom
+      args:
+        creates: /etc/apache2/conf-enabled/apache2-passenger-custom.conf
+      notify:
+        - Restart 'apache2' service
+    - name: Update passenger.conf to point to Ruby version installed via rbenv
+      lineinfile:
+        dest: /etc/apache2/mods-available/passenger.conf
+        regexp: .*PassengerDefaultRuby
+        line: '  PassengerDefaultRuby /home/rails/.rbenv/versions/{{ ruby_version }}/bin/ruby'
+        owner: root
+        group: root
+        mode: 0644
+      notify:
+        - Restart 'apache2' service
+    - name: Enable mod_headers for Apache
+      command: a2enmod headers
+      notify:
+        - Restart 'apache2' service
+    - name: Create the /var/backups/mysql/ directory
+      file: name=/var/backups/mysql state=directory owner=root group=root mode=0600
+    - name: Copy the 'mysqldump.sh' shell script to /etc/cron.daily/
+      copy: src=files/mysqldump.sh dest=/etc/cron.daily/mysqldump.sh owner=root group=root mode=0755
+    - name: Copy 'issue.net' to /etc/
+      copy: src=files/issue.net dest=/etc/issue.net owner=root group=root mode=0644
+    - name: Enable banner messsage for SSH
+      replace:
+        dest: /etc/ssh/sshd_config
+        regexp: ^\#Banner\ /etc/issue.net
+        replace: 'Banner /etc/issue.net'
+        owner: root
+        group: root
+        mode: 0644
+      notify:
+        - Restart 'ssh' service
+    - name: Disable password authentication for SSH
+      replace:
+        dest: /etc/ssh/sshd_config
+        regexp: ^PasswordAuthentication\ yes
+        replace: 'PasswordAuthentication no'
+        owner: root
+        group: root
+        mode: 0644
+      notify:
+        - Restart 'ssh' service
+    - name: Disable root login for SSH
+      replace:
+        dest: /etc/ssh/sshd_config
+        regexp: ^PermitRootLogin\ without-password
+        replace: 'PermitRootLogin no'
+        owner: root
+        group: root
+        mode: 0644
+      notify:
+        - Restart 'ssh' service
+    - name: Lock the local 'root' account
+      command: passwd -dl root
   handlers:
     - name: Restart 'apache2' service
       service: name=apache2 state=restarted
+    - name: Start 'procps' service
+      service: name=procps state=started
+    - name: Restart 'iptables-persistent' service
+      service: name=iptables-persistent state=restarted
+    - name: Restart 'ssh' service
+      service: name=ssh state=restarted
