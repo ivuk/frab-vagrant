@@ -1,0 +1,10 @@
+/home/rails/frab-app/log/*.log
+{
+    weekly
+    missingok
+    rotate 52
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+}
