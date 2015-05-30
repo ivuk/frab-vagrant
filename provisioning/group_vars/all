@@ -4,4 +4,14 @@ frab_db_pass: ididnotreadtheinstructions
 frab_db: ididnotreadtheinstructions
 frab_devel_db: ididnotreadtheinstructions2
 frab_test_db: ididnotreadtheinstructions3
-default_admin_email: admin@example.org
+default_admin_email: root@localhost.localdomain
+default_admin_public_name: default_admin_1
+default_admin_password: ididnotread
+ruby_version: 1.9.3-p551
+frab_host: localhost
+frab_email: frab@localhost.localdomain
+frab_smtp_server: localhost
+frab_smtp_server_port: 25
+frab_smtp_domain: localdomain
+frab_smtp_auth_username: ididnotread2
+frab_smtp_auth_password: ididnotread3
