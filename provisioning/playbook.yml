@@ -63,6 +63,8 @@
         - rules.v6
       notify:
         - Restart 'iptables-persistent' service
+    - name: Copy 'rails-production-log' to /etc/logrotate.d/
+      copy: src=files/rails-production-log dest=/etc/logrotate.d/rails-production-log owner=root group=root mode=0644
     - name: Add the 'rails' user account
       user: name=rails shell=/usr/sbin/nologin
     - name: Clone the 'frab' repository from GitHub
