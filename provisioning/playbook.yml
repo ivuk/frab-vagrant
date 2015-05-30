@@ -146,8 +146,10 @@
         owner: rails
         group: rails
         mode: 0600
-    - name: Copy '001-frab.conf' to /etc/apache2/sites-available/
-      copy: src=files/001-frab.conf dest=/etc/apache2/sites-available/001-frab.conf owner=root group=root mode=0600
+    - name: Copy '001-frab.conf' template to /etc/apache2/sites-available/
+      template: src=templates/001-frab.conf.j2 dest=/etc/apache2/sites-available/001-frab.conf owner=root group=root mode=0600
+    - name: Copy '001-frab-ssl.conf' to /etc/apache2/sites-available/
+      copy: src=files/001-frab-ssl.conf dest=/etc/apache2/sites-available/001-frab-ssl.conf owner=root group=root mode=0600
     - name: Disable the 'default' virtual host
       command: a2dissite 000-default
       notify:
@@ -156,6 +158,18 @@
       command: a2ensite 001-frab
       args:
         creates: /etc/apache2/sites-enabled/001-frab.conf
+      notify:
+        - Restart 'apache2' service
+    - name: Enable mod_ssl for Apache
+      command: a2enmod ssl
+      args:
+        creates: /etc/apache2/mods-enabled/ssl.load
+      notify:
+        - Restart 'apache2' service
+    - name: Enable the '001-frab-ssl' virtual host
+      command: a2ensite 001-frab-ssl
+      args:
+        creates: /etc/apache2/sites-enabled/001-frab-ssl.conf
       notify:
         - Restart 'apache2' service
     - name: Copy 'apache2-passenger-custom.conf.j2' to /etc/apache2/conf-available/ so we configure Passenger properly
